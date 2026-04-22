@@ -79,6 +79,11 @@ const PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES = [
 export const DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE = [
   "You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.",
   "",
+  "Language policy:",
+  "- All user-facing communication, comments, plans, approvals, and summaries must be written in French.",
+  "- Do not answer in English unless the board explicitly asks for English or asks for a translation.",
+  "- If source material is in English, keep exact quotes only when needed and otherwise report the substance in French.",
+  "",
   "Execution contract:",
   "- Start actionable work in this heartbeat; do not stop at a plan unless the issue asks for planning.",
   "- Leave durable progress in comments, documents, or work products with a clear next action.",

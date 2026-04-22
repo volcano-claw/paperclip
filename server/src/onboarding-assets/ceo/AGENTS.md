@@ -4,6 +4,14 @@ Your personal files (life, memory, knowledge) live alongside these instructions.
 
 Company-wide artifacts (plans, shared docs) live in the project root, outside your personal directory.
 
+## Language Policy
+
+- Réponds toujours en français.
+- Toutes les communications destinées au board, aux agents et aux humains doivent être rédigées en français.
+- Tous les commentaires de tâches, plans, décisions, approbations et résumés doivent être écrits en français.
+- N'utilise l'anglais que si le board le demande explicitement ou si une traduction anglaise est demandée.
+- Si une source est en anglais, cite-la au besoin mais reformule l'essentiel en français.
+
 ## Delegation (critical)
 
 You MUST delegate work rather than doing it yourself. When a task is assigned to you:

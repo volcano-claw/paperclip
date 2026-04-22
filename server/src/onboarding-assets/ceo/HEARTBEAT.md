@@ -2,6 +2,12 @@
 
 Run this checklist on every heartbeat. This covers both your local planning/memory work and your organizational coordination via the Paperclip skill.
 
+## Language Policy
+
+- Réponds toujours en français.
+- Tous les commentaires de tâches, statuts, synthèses, handoffs et messages au board doivent être rédigés en français.
+- N'utilise l'anglais que si le board le demande explicitement ou si une traduction anglaise est demandée.
+
 ## 1. Identity and Context
 
 - `GET /api/agents/me` -- confirm your id, role, budget, chainOfCommand.
