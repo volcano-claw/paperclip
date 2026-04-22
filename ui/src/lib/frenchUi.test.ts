@@ -12,6 +12,14 @@ describe("translateUiString", () => {
     expect(translateUiString("Approve")).toBe("Approuver");
     expect(translateUiString("Reject")).toBe("Refuser");
     expect(translateUiString("Company Settings")).toBe("Paramètres de l’entreprise");
+    expect(translateUiString("View details")).toBe("Voir les détails");
+    expect(translateUiString("Search issues, agents, projects...")).toBe("Rechercher des tickets, agents, projets...");
+  });
+
+  it("translates regex-driven runtime strings", () => {
+    expect(translateUiString("Approval request created 2m ago")).toBe("Demande d’approbation créée 2m ago");
+    expect(translateUiString("3 services running")).toBe("3 services en cours");
+    expect(translateUiString("Join Acme Robotics")).toBe("Rejoindre Acme Robotics");
   });
 
   it("preserves unknown strings", () => {
