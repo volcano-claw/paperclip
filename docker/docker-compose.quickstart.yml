@@ -8,6 +8,7 @@ services:
     environment:
       HOST: "0.0.0.0"
       PAPERCLIP_HOME: "/paperclip"
+      PAPERCLIP_LOG_DIR: "${PAPERCLIP_LOG_DIR:-/tmp/paperclip-logs}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
