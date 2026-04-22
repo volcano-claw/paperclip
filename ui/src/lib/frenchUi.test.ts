@@ -22,6 +22,13 @@ describe("translateUiString", () => {
     expect(translateUiString("Join Acme Robotics")).toBe("Rejoindre Acme Robotics");
   });
 
+  it("translates visible auth and invite strings", () => {
+    expect(translateUiString("Invite not available")).toBe("Invitation indisponible");
+    expect(translateUiString("This invite may be expired, revoked, or already used.")).toBe("Cette invitation est peut-être expirée, révoquée ou déjà utilisée.");
+    expect(translateUiString("Create your Paperclip account")).toBe("Créer ton compte PaperClip");
+    expect(translateUiString("Create account and continue")).toBe("Créer le compte et continuer");
+  });
+
   it("preserves unknown strings", () => {
     expect(translateUiString("Custom user content")).toBe("Custom user content");
   });
