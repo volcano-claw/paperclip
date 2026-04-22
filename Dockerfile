@@ -2,7 +2,7 @@ FROM node:lts-trixie-slim AS base
 ARG USER_UID=1000
 ARG USER_GID=1000
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates gosu curl gh git wget ripgrep python3 \
+  && apt-get install -y --no-install-recommends ca-certificates gosu curl gh git wget ripgrep python3 python3-pip python3-venv \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 
@@ -49,8 +49,11 @@ WORKDIR /app
 COPY --chown=node:node --from=build /app /app
 RUN npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai \
   && apt-get update \
-  && apt-get install -y --no-install-recommends openssh-client jq \
+  && apt-get install -y --no-install-recommends openssh-client jq python3-pip python3-venv \
   && rm -rf /var/lib/apt/lists/* \
+  && python3 -m venv /opt/hermes-venv \
+  && /opt/hermes-venv/bin/pip install --no-cache-dir git+https://github.com/NousResearch/hermes-agent.git@88564ad8bc7518f2c67bbbc63b758adcac5f8dca \
+  && ln -sf /opt/hermes-venv/bin/hermes /usr/local/bin/hermes \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
 

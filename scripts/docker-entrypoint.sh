@@ -26,4 +26,30 @@ if [ "$changed" = "1" ]; then
     chown -R node:node /paperclip
 fi
 
+mkdir -p /paperclip/hermes-home
+
+copy_if_missing() {
+    src="$1"
+    dst="$2"
+    if [ -e "$src" ] && [ ! -e "$dst" ]; then
+        mkdir -p "$(dirname "$dst")"
+        cp -R "$src" "$dst"
+    fi
+}
+
+if [ -d /opt/hermes-seed ]; then
+    copy_if_missing /opt/hermes-seed/.env /paperclip/hermes-home/.env
+    copy_if_missing /opt/hermes-seed/config.yaml /paperclip/hermes-home/config.yaml
+    copy_if_missing /opt/hermes-seed/SOUL.md /paperclip/hermes-home/SOUL.md
+    copy_if_missing /opt/hermes-seed/memories /paperclip/hermes-home/memories
+    copy_if_missing /opt/hermes-seed/skills /paperclip/hermes-home/skills
+    copy_if_missing /opt/hermes-seed/auth.json /paperclip/hermes-home/auth.json
+    copy_if_missing /opt/hermes-seed/home/.gitconfig /paperclip/.gitconfig
+    copy_if_missing /opt/hermes-seed/home/.git-credentials /paperclip/.git-credentials
+fi
+
+chown -R node:node /paperclip/hermes-home || true
+[ -f /paperclip/.gitconfig ] && chown node:node /paperclip/.gitconfig || true
+[ -f /paperclip/.git-credentials ] && chown node:node /paperclip/.git-credentials || true
+
 exec gosu node "$@"
