@@ -222,6 +222,38 @@ export function CompanySettings() {
     }
   });
 
+  const removeMutation = useMutation({
+    mutationFn: ({
+      companyId,
+      nextCompanyId
+    }: {
+      companyId: string;
+      nextCompanyId: string | null;
+    }) => companiesApi.remove(companyId).then(() => ({ nextCompanyId })),
+    onSuccess: async ({ nextCompanyId }) => {
+      if (nextCompanyId) {
+        setSelectedCompanyId(nextCompanyId);
+      }
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.companies.all
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.companies.stats
+      });
+      pushToast({
+        title: "Société supprimée",
+        tone: "success"
+      });
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Échec de la suppression de la société",
+        body: err instanceof Error ? err.message : "Erreur inconnue",
+        tone: "error"
+      });
+    }
+  });
+
   useEffect(() => {
     setBreadcrumbs([
       { label: selectedCompany?.name ?? "Company", href: "/dashboard" },
@@ -574,7 +606,7 @@ export function CompanySettings() {
             Archive this company to hide it from the sidebar. This persists in
             the database.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="destructive"
@@ -606,6 +638,32 @@ export function CompanySettings() {
                 ? "Already archived"
                 : "Archive company"}
             </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={removeMutation.isPending}
+              onClick={() => {
+                if (!selectedCompanyId) return;
+                const confirmation = window.prompt(
+                  `Delete company "${selectedCompany.name}" permanently? Type the company name to confirm.`
+                );
+                if (confirmation !== selectedCompany.name) return;
+                const nextCompanyId =
+                  companies.find(
+                    (company) =>
+                      company.id !== selectedCompanyId &&
+                      company.status !== "archived"
+                  )?.id ??
+                  companies.find((company) => company.id !== selectedCompanyId)?.id ??
+                  null;
+                removeMutation.mutate({
+                  companyId: selectedCompanyId,
+                  nextCompanyId
+                });
+              }}
+            >
+              {removeMutation.isPending ? "Deleting..." : "Delete company"}
+            </Button>
             {archiveMutation.isError && (
               <span className="text-xs text-destructive">
                 {archiveMutation.error instanceof Error
@@ -613,7 +671,17 @@ export function CompanySettings() {
                   : "Failed to archive company"}
               </span>
             )}
+            {removeMutation.isError && (
+              <span className="text-xs text-destructive">
+                {removeMutation.error instanceof Error
+                  ? removeMutation.error.message
+                  : "Failed to delete company"}
+              </span>
+            )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Delete permanently removes the company and its related agents, projects, issues, approvals, and access records.
+          </p>
         </div>
       </div>
     </div>
