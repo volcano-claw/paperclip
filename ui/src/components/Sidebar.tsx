@@ -20,6 +20,7 @@ import { SidebarProjects } from "./SidebarProjects";
 import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
+import { activityApi } from "../api/activity";
 import { heartbeatsApi } from "../api/heartbeats";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { queryKeys } from "../lib/queryKeys";
@@ -42,7 +43,14 @@ export function Sidebar() {
     enabled: !!selectedCompanyId,
     refetchInterval: 10_000,
   });
+  const { data: failedExternalEvents } = useQuery({
+    queryKey: ["activity", selectedCompanyId, "external-communications", "failed", 100],
+    queryFn: () => activityApi.externalCommunications(selectedCompanyId!, { status: "failed", limit: 100 }),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 30_000,
+  });
   const liveRunCount = liveRuns?.length ?? 0;
+  const failedExternalCount = failedExternalEvents?.length ?? 0;
   const showWorkspacesLink = experimentalSettings?.enableIsolatedWorkspaces === true;
 
   function openSearch() {
@@ -114,7 +122,14 @@ export function Sidebar() {
           <SidebarNavItem to="/org" label="Org" icon={Network} />
           <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
           <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
-          <SidebarNavItem to="/activity" label="Activity" icon={History} />
+          <SidebarNavItem
+            to="/audit"
+            label="Audit"
+            icon={History}
+            badge={failedExternalCount}
+            badgeTone={failedExternalCount > 0 ? "danger" : "default"}
+            alert={failedExternalCount > 0}
+          />
           <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
         </SidebarSection>
 

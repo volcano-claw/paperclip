@@ -442,18 +442,19 @@ export interface PluginDatabaseClient {
  * @see PLUGIN_SPEC.md §15.1 — Capabilities: Runtime/Integration
  */
 export interface PluginHttpClient {
-  /**
-   * Perform an outbound HTTP request.
-   *
-   * The host enforces `http.outbound` capability before allowing the call.
-   * Plugins may also use standard Node `fetch` or other libraries directly —
-   * this client exists for host-managed tracing and audit logging.
-   *
-   * @param url - Target URL
-   * @param init - Standard `RequestInit` options
-   * @returns The response
-   */
-  fetch(url: string, init?: RequestInit): Promise<Response>;
+  /** Optional audit metadata recorded by the host for traced outbound requests. */
+  fetch(
+    url: string,
+    init?: RequestInit,
+    audit?: {
+      companyId?: string;
+      entityType?: string;
+      entityId?: string;
+      targetLabel?: string;
+      correlationId?: string;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<Response>;
 }
 
 /**

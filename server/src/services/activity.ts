@@ -19,6 +19,11 @@ import { classifyRunLiveness } from "./run-liveness.js";
 export interface ActivityFilters {
   companyId: string;
   agentId?: string;
+  action?: string;
+  status?: string;
+  channel?: string;
+  direction?: string;
+  correlationId?: string;
   entityType?: string;
   entityId?: string;
   limit?: number;
@@ -140,6 +145,59 @@ export function activityService(db: Db) {
 
   function readNumber(value: unknown) {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  function buildListQuery(filters: ActivityFilters, order: "asc" | "desc" = "desc") {
+    const conditions = [eq(activityLog.companyId, filters.companyId)];
+    const limit = normalizeActivityLimit(filters.limit);
+
+    if (filters.agentId) {
+      conditions.push(eq(activityLog.agentId, filters.agentId));
+    }
+    if (filters.action) {
+      conditions.push(eq(activityLog.action, filters.action));
+    }
+    if (filters.status) {
+      conditions.push(eq(activityLog.status, filters.status));
+    }
+    if (filters.channel) {
+      conditions.push(eq(activityLog.channel, filters.channel));
+    }
+    if (filters.direction) {
+      conditions.push(eq(activityLog.direction, filters.direction));
+    }
+    if (filters.correlationId) {
+      conditions.push(eq(activityLog.correlationId, filters.correlationId));
+    }
+    if (filters.entityType) {
+      conditions.push(eq(activityLog.entityType, filters.entityType));
+    }
+    if (filters.entityId) {
+      conditions.push(eq(activityLog.entityId, filters.entityId));
+    }
+
+    return db
+      .select({ activityLog })
+      .from(activityLog)
+      .leftJoin(
+        issues,
+        and(
+          eq(activityLog.entityType, sql`'issue'`),
+          eq(activityLog.entityId, issueIdAsText),
+        ),
+      )
+      .where(
+        and(
+          ...conditions,
+          or(
+            sql`${activityLog.entityType} != 'issue'`,
+            isNull(issues.hiddenAt),
+          ),
+        ),
+      )
+      .orderBy(order === "asc" ? asc(activityLog.createdAt) : desc(activityLog.createdAt))
+      .limit(limit)
+      .then((rows) => rows.map((r) => r.activityLog));
   }
 
   async function backfillMissingRunLivenessForIssue(companyId: string, issueId: string) {
@@ -323,43 +381,42 @@ export function activityService(db: Db) {
   }
 
   return {
-    list: (filters: ActivityFilters) => {
-      const conditions = [eq(activityLog.companyId, filters.companyId)];
-      const limit = normalizeActivityLimit(filters.limit);
+    list: (filters: ActivityFilters) => buildListQuery(filters, "desc"),
 
-      if (filters.agentId) {
-        conditions.push(eq(activityLog.agentId, filters.agentId));
-      }
-      if (filters.entityType) {
-        conditions.push(eq(activityLog.entityType, filters.entityType));
-      }
-      if (filters.entityId) {
-        conditions.push(eq(activityLog.entityId, filters.entityId));
-      }
+    correlationTimeline: (companyId: string, correlationId: string, limit?: number) =>
+      buildListQuery({ companyId, correlationId, limit }, "asc"),
 
-      return db
-        .select({ activityLog })
-        .from(activityLog)
-        .leftJoin(
-          issues,
-          and(
-            eq(activityLog.entityType, sql`'issue'`),
-            eq(activityLog.entityId, issueIdAsText),
-          ),
-        )
-        .where(
-          and(
-            ...conditions,
-            or(
-              sql`${activityLog.entityType} != 'issue'`,
-              isNull(issues.hiddenAt),
-            ),
-          ),
-        )
-        .orderBy(desc(activityLog.createdAt))
-        .limit(limit)
-        .then((rows) => rows.map((r) => r.activityLog));
-    },
+    externalCommunications: (companyId: string, filters?: {
+      channel?: string;
+      status?: string;
+      agentId?: string;
+      entityType?: string;
+      entityId?: string;
+      limit?: number;
+    }) => buildListQuery({
+      companyId,
+      agentId: filters?.agentId,
+      status: filters?.status,
+      channel: filters?.channel,
+      direction: "external",
+      entityType: filters?.entityType,
+      entityId: filters?.entityId,
+      limit: filters?.limit,
+    }, "desc"),
+
+    listForAgent: (companyId: string, agentId: string, filters?: Omit<ActivityFilters, "companyId" | "agentId">) =>
+      buildListQuery({
+        companyId,
+        agentId,
+        action: filters?.action,
+        status: filters?.status,
+        channel: filters?.channel,
+        direction: filters?.direction,
+        correlationId: filters?.correlationId,
+        entityType: filters?.entityType,
+        entityId: filters?.entityId,
+        limit: filters?.limit,
+      }, "desc"),
 
     forIssue: (issueId: string) =>
       db

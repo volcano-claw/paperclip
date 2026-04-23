@@ -55,10 +55,23 @@ export interface LogActivityInput {
   actorType: "agent" | "user" | "system" | "plugin";
   actorId: string;
   action: string;
+  status?: "success" | "failed" | "pending" | "cancelled";
   entityType: string;
   entityId: string;
   agentId?: string | null;
   runId?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  targetLabel?: string | null;
+  channel?: string | null;
+  direction?: "internal" | "external" | null;
+  contentSummary?: string | null;
+  contentRef?: string | null;
+  approvalContext?: Record<string, unknown> | null;
+  authorizationBasis?: Record<string, unknown> | null;
+  parentEventId?: string | null;
+  correlationId?: string | null;
+  errorMessage?: string | null;
   details?: Record<string, unknown> | null;
 }
 
@@ -75,10 +88,23 @@ export async function logActivity(db: Db, input: LogActivityInput) {
     actorType: input.actorType,
     actorId: input.actorId,
     action: input.action,
+    status: input.status ?? "success",
     entityType: input.entityType,
     entityId: input.entityId,
     agentId: input.agentId ?? null,
     runId: input.runId ?? null,
+    targetType: input.targetType ?? null,
+    targetId: input.targetId ?? null,
+    targetLabel: input.targetLabel ?? null,
+    channel: input.channel ?? null,
+    direction: input.direction ?? null,
+    contentSummary: input.contentSummary ?? null,
+    contentRef: input.contentRef ?? null,
+    approvalContext: input.approvalContext ? sanitizeRecord(input.approvalContext) : null,
+    authorizationBasis: input.authorizationBasis ? sanitizeRecord(input.authorizationBasis) : null,
+    parentEventId: input.parentEventId ?? null,
+    correlationId: input.correlationId ?? null,
+    errorMessage: input.errorMessage ?? null,
     details: redactedDetails,
   });
 
@@ -89,10 +115,23 @@ export async function logActivity(db: Db, input: LogActivityInput) {
       actorType: input.actorType,
       actorId: input.actorId,
       action: input.action,
+      status: input.status ?? "success",
       entityType: input.entityType,
       entityId: input.entityId,
       agentId: input.agentId ?? null,
       runId: input.runId ?? null,
+      targetType: input.targetType ?? null,
+      targetId: input.targetId ?? null,
+      targetLabel: input.targetLabel ?? null,
+      channel: input.channel ?? null,
+      direction: input.direction ?? null,
+      contentSummary: input.contentSummary ?? null,
+      contentRef: input.contentRef ?? null,
+      approvalContext: input.approvalContext ?? null,
+      authorizationBasis: input.authorizationBasis ?? null,
+      parentEventId: input.parentEventId ?? null,
+      correlationId: input.correlationId ?? null,
+      errorMessage: input.errorMessage ?? null,
       details: redactedDetails,
     },
   });
@@ -110,8 +149,21 @@ export async function logActivity(db: Db, input: LogActivityInput) {
       companyId: input.companyId,
       payload: {
         ...redactedDetails,
+        status: input.status ?? "success",
         agentId: input.agentId ?? null,
         runId: input.runId ?? null,
+        targetType: input.targetType ?? null,
+        targetId: input.targetId ?? null,
+        targetLabel: input.targetLabel ?? null,
+        channel: input.channel ?? null,
+        direction: input.direction ?? null,
+        contentSummary: input.contentSummary ?? null,
+        contentRef: input.contentRef ?? null,
+        approvalContext: input.approvalContext ?? null,
+        authorizationBasis: input.authorizationBasis ?? null,
+        parentEventId: input.parentEventId ?? null,
+        correlationId: input.correlationId ?? null,
+        errorMessage: input.errorMessage ?? null,
       },
     };
     publishPluginDomainEvent(event);

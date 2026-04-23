@@ -117,6 +117,95 @@ describeEmbeddedPostgres("activity service", () => {
     expect(result.map((event) => event.action)).toEqual(["test.newest", "test.middle"]);
   });
 
+  it("filters company activity by audit fields", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Hermes",
+      role: "general",
+      status: "idle",
+      adapterType: "hermes_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(activityLog).values([
+      {
+        companyId,
+        actorType: "agent",
+        actorId: agentId,
+        action: "email.sent",
+        status: "success",
+        entityType: "issue",
+        entityId: "issue-1",
+        agentId,
+        channel: "email",
+        direction: "external",
+        correlationId: "corr-1",
+        createdAt: new Date("2026-04-21T12:00:00.000Z"),
+      },
+      {
+        companyId,
+        actorType: "agent",
+        actorId: agentId,
+        action: "email.sent",
+        status: "failed",
+        entityType: "issue",
+        entityId: "issue-1",
+        agentId,
+        channel: "email",
+        direction: "external",
+        correlationId: "corr-2",
+        createdAt: new Date("2026-04-21T13:00:00.000Z"),
+      },
+      {
+        companyId,
+        actorType: "system",
+        actorId: "system",
+        action: "comment.posted",
+        status: "success",
+        entityType: "issue",
+        entityId: "issue-1",
+        channel: "paperclip",
+        direction: "internal",
+        correlationId: "corr-1",
+        createdAt: new Date("2026-04-21T14:00:00.000Z"),
+      },
+    ]);
+
+    const result = await activityService(db).list({
+      companyId,
+      action: "email.sent",
+      status: "failed",
+      channel: "email",
+      direction: "external",
+      correlationId: "corr-2",
+      agentId,
+      limit: 10,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      action: "email.sent",
+      status: "failed",
+      channel: "email",
+      direction: "external",
+      correlationId: "corr-2",
+      agentId,
+    });
+  });
+
   it("returns compact usage and result summaries for issue runs", async () => {
     const companyId = randomUUID();
     const agentId = randomUUID();

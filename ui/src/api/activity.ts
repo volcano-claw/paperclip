@@ -35,16 +35,49 @@ export interface IssueForRun {
   priority: string;
 }
 
+export interface AuditArtifact {
+  id: string;
+  companyId: string;
+  eventId: string | null;
+  artifactType: string;
+  mimeType: string | null;
+  contentText: string | null;
+  contentJson: Record<string, unknown> | null;
+  contentHash: string | null;
+  redacted: boolean;
+  createdAt: string;
+}
+
+function buildActivityQuery(filters?: {
+  entityType?: string;
+  entityId?: string;
+  agentId?: string;
+  channel?: string;
+  status?: string;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.entityType) params.set("entityType", filters.entityType);
+  if (filters?.entityId) params.set("entityId", filters.entityId);
+  if (filters?.agentId) params.set("agentId", filters.agentId);
+  if (filters?.channel) params.set("channel", filters.channel);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.limit) params.set("limit", String(filters.limit));
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const activityApi = {
-  list: (companyId: string, filters?: { entityType?: string; entityId?: string; agentId?: string; limit?: number }) => {
-    const params = new URLSearchParams();
-    if (filters?.entityType) params.set("entityType", filters.entityType);
-    if (filters?.entityId) params.set("entityId", filters.entityId);
-    if (filters?.agentId) params.set("agentId", filters.agentId);
-    if (filters?.limit) params.set("limit", String(filters.limit));
-    const qs = params.toString();
-    return api.get<ActivityEvent[]>(`/companies/${companyId}/activity${qs ? `?${qs}` : ""}`);
-  },
+  list: (companyId: string, filters?: { entityType?: string; entityId?: string; agentId?: string; limit?: number }) =>
+    api.get<ActivityEvent[]>(`/companies/${companyId}/activity${buildActivityQuery(filters)}`),
+  externalCommunications: (
+    companyId: string,
+    filters?: { entityType?: string; entityId?: string; agentId?: string; channel?: string; status?: string; limit?: number },
+  ) => api.get<ActivityEvent[]>(`/companies/${companyId}/external-communications${buildActivityQuery(filters)}`),
+  correlationTimeline: (companyId: string, correlationId: string, limit?: number) =>
+    api.get<ActivityEvent[]>(`/companies/${companyId}/activity/correlations/${encodeURIComponent(correlationId)}${limit ? `?limit=${limit}` : ""}`),
+  getAuditArtifact: (companyId: string, artifactId: string) =>
+    api.get<AuditArtifact>(`/companies/${companyId}/audit-artifacts/${artifactId}`),
   forIssue: (issueId: string) => api.get<ActivityEvent[]>(`/issues/${issueId}/activity`),
   runsForIssue: (issueId: string) => api.get<RunForIssue[]>(`/issues/${issueId}/runs`),
   issuesForRun: (runId: string) => api.get<IssueForRun[]>(`/heartbeat-runs/${runId}/issues`),

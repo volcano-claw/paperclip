@@ -41,6 +41,7 @@ import { pluginStateStore } from "./plugin-state-store.js";
 import { pluginDatabaseService } from "./plugin-database.js";
 import { createPluginSecretsHandler } from "./plugin-secrets-handler.js";
 import { logActivity } from "./activity-log.js";
+import { auditArtifactService } from "./audit-artifacts.js";
 import type { PluginEventBus } from "./plugin-event-bus.js";
 import { lookup as dnsLookup } from "node:dns/promises";
 import type { IncomingMessage, RequestOptions as HttpRequestOptions } from "node:http";
@@ -49,6 +50,7 @@ import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { logger } from "../middleware/logger.js";
 import { getTelemetryClient } from "../telemetry.js";
+import { sanitizeRecord } from "../redaction.js";
 
 // ---------------------------------------------------------------------------
 // SSRF protection for plugin HTTP fetch
@@ -332,6 +334,7 @@ const MAX_LOG_MESSAGE_LENGTH = 10_000;
 
 /** Max serialised JSON size for plugin log meta objects. */
 const MAX_LOG_META_JSON_LENGTH = 50_000;
+const MAX_HTTP_AUDIT_BODY_LENGTH = 20_000;
 
 /** Max length for a metric name. */
 const MAX_METRIC_NAME_LENGTH = 500;
@@ -350,6 +353,44 @@ const PINO_RESERVED_KEYS = new Set([
 function truncStr(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, max) + "...[truncated]";
+}
+
+function sanitizeUrlForAudit(urlString: string): { targetId: string; targetLabel: string; summaryPath: string } {
+  try {
+    const url = new URL(urlString);
+    return {
+      targetId: `${url.origin}${url.pathname}`,
+      targetLabel: url.host,
+      summaryPath: `${url.host}${url.pathname}`,
+    };
+  } catch {
+    const safe = truncStr(urlString, 500);
+    return {
+      targetId: safe,
+      targetLabel: safe,
+      summaryPath: safe,
+    };
+  }
+}
+
+function sanitizeAuditHeaders(headers: unknown): Record<string, unknown> | null {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return null;
+  return sanitizeRecord(headers as Record<string, unknown>);
+}
+
+function sanitizeAuditBody(body: unknown): string | null {
+  if (typeof body !== "string" || body.length === 0) return null;
+  const trimmed = body.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return truncStr(JSON.stringify(sanitizeRecord(parsed as Record<string, unknown>)), MAX_HTTP_AUDIT_BODY_LENGTH);
+    }
+  } catch {
+    // Keep raw text fallback below.
+  }
+  return truncStr(body, MAX_HTTP_AUDIT_BODY_LENGTH);
 }
 
 /** Sanitise a plugin-supplied meta object: enforce size limit and strip reserved keys. */
@@ -475,6 +516,7 @@ export function buildHostServices(
   const budgets = budgetService(db);
   const issueApprovals = issueApprovalService(db);
   const assets = assetService(db);
+  const auditArtifacts = auditArtifactService(db);
   const scopedBus = eventBus.forPlugin(pluginKey);
 
   // Track active session event subscriptions for cleanup
@@ -818,13 +860,114 @@ export function buildHostServices(
         // SSRF protection: validate protocol whitelist + block private IPs.
         // Resolve once, then connect directly to that IP to prevent DNS rebinding.
         const target = await validateAndResolveFetchUrl(params.url);
+        const init = params.init as RequestInit | undefined;
+        const method = String(init?.method ?? "GET").toUpperCase();
+        const auditContext = params.audit ?? null;
+        const auditedCompanyId = typeof auditContext?.companyId === "string" && auditContext.companyId.trim().length > 0
+          ? auditContext.companyId.trim()
+          : null;
+        const urlMeta = sanitizeUrlForAudit(params.url);
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), PLUGIN_FETCH_TIMEOUT_MS);
 
         try {
-          const init = params.init as RequestInit | undefined;
-          return await executePinnedHttpRequest(target, init, controller.signal);
+          const response = await executePinnedHttpRequest(target, init, controller.signal);
+
+          if (auditedCompanyId) {
+            const artifact = await auditArtifacts.create({
+              companyId: auditedCompanyId,
+              artifactType: "http_exchange",
+              mimeType: "application/json",
+              contentJson: {
+                request: {
+                  method,
+                  url: urlMeta.targetId,
+                  headers: sanitizeAuditHeaders(init?.headers),
+                  body: sanitizeAuditBody(init?.body),
+                },
+                response: {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: sanitizeAuditHeaders(response.headers),
+                  body: sanitizeAuditBody(response.body),
+                },
+              },
+              redacted: true,
+            });
+
+            await logActivity(db, {
+              companyId: auditedCompanyId,
+              actorType: "plugin",
+              actorId: pluginId,
+              action: "http.request",
+              status: response.status >= 400 ? "failed" : "success",
+              entityType: auditContext?.entityType ?? "plugin",
+              entityId: auditContext?.entityId ?? pluginId,
+              targetType: "url",
+              targetId: urlMeta.targetId,
+              targetLabel: auditContext?.targetLabel ?? urlMeta.targetLabel,
+              channel: "http",
+              direction: "external",
+              contentSummary: `${method} ${urlMeta.summaryPath} → ${response.status}`,
+              contentRef: artifact?.id ?? null,
+              correlationId: auditContext?.correlationId ?? null,
+              details: pluginActivityDetails({
+                method,
+                url: urlMeta.targetId,
+                responseStatus: response.status,
+                responseStatusText: response.statusText,
+                ...(auditContext?.metadata ? { auditMetadata: sanitizeRecord(auditContext.metadata) } : {}),
+              }),
+            });
+          }
+
+          return response;
+        } catch (err) {
+          if (auditedCompanyId) {
+            const message = err instanceof Error ? err.message : String(err);
+            const artifact = await auditArtifacts.create({
+              companyId: auditedCompanyId,
+              artifactType: "http_exchange",
+              mimeType: "application/json",
+              contentJson: {
+                request: {
+                  method,
+                  url: urlMeta.targetId,
+                  headers: sanitizeAuditHeaders(init?.headers),
+                  body: sanitizeAuditBody(init?.body),
+                },
+                response: null,
+                error: message,
+              },
+              redacted: true,
+            });
+
+            await logActivity(db, {
+              companyId: auditedCompanyId,
+              actorType: "plugin",
+              actorId: pluginId,
+              action: "http.request",
+              status: "failed",
+              entityType: auditContext?.entityType ?? "plugin",
+              entityId: auditContext?.entityId ?? pluginId,
+              targetType: "url",
+              targetId: urlMeta.targetId,
+              targetLabel: auditContext?.targetLabel ?? urlMeta.targetLabel,
+              channel: "http",
+              direction: "external",
+              contentSummary: `${method} ${urlMeta.summaryPath} → failed`,
+              contentRef: artifact?.id ?? null,
+              correlationId: auditContext?.correlationId ?? null,
+              errorMessage: message,
+              details: pluginActivityDetails({
+                method,
+                url: urlMeta.targetId,
+                ...(auditContext?.metadata ? { auditMetadata: sanitizeRecord(auditContext.metadata) } : {}),
+              }),
+            });
+          }
+          throw err;
         } finally {
           clearTimeout(timeout);
         }

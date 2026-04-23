@@ -442,6 +442,20 @@
       "when": 1776780000000,
       "tag": "0062_routine_run_dispatch_fingerprint",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1776870000000,
+      "tag": "0063_audit_activity_log_expansion",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1776873600000,
+      "tag": "0064_audit_artifacts",
+      "breakpoints": true
     }
   ]
 }
