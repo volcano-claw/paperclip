@@ -35,6 +35,7 @@ import { FileText, Globe, History, Link2, ShieldAlert, ShieldCheck, AlertTriangl
 const ACTIVITY_PAGE_LIMIT = 200;
 type ActivityMode = "all" | "external";
 type TimeWindow = "all" | "today" | "7d" | "30d";
+type ExternalStatusFilter = "all" | "success" | "failed" | "pending" | "cancelled";
 
 function detailString(event: ActivityEvent, ...keys: string[]) {
   const details = event.details;
@@ -133,6 +134,8 @@ export function Activity() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const [filter, setFilter] = useState("all");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("7d");
+  const [externalStatusFilter, setExternalStatusFilter] = useState<ExternalStatusFilter>("all");
+  const [externalChannelFilter, setExternalChannelFilter] = useState<string>("all");
   const [mode, setMode] = useState<ActivityMode>("all");
   const [selectedEvent, setSelectedEvent] = useState<ActivityEvent | null>(null);
 
@@ -238,11 +241,15 @@ export function Activity() {
 
     return (data ?? []).filter((event) => {
       if (filter !== "all" && event.entityType !== filter) return false;
+      if (mode === "external") {
+        if (externalStatusFilter !== "all" && (event.status ?? "success") !== externalStatusFilter) return false;
+        if (externalChannelFilter !== "all" && (event.channel ?? "external") !== externalChannelFilter) return false;
+      }
       if (minTimestamp == null) return true;
       const eventTime = new Date(event.createdAt).getTime();
       return Number.isFinite(eventTime) && eventTime >= minTimestamp;
     });
-  }, [data, filter, timeWindow]);
+  }, [data, externalChannelFilter, externalStatusFilter, filter, mode, timeWindow]);
 
   const externalStats = useMemo(() => {
     const events = filtered ?? [];
@@ -260,9 +267,24 @@ export function Activity() {
     };
   }, [filtered]);
 
+  const groupedExternalEvents = useMemo(() => {
+    const groups = new Map<string, ActivityEvent[]>();
+    for (const event of filtered ?? []) {
+      const key = event.channel ?? "external";
+      const existing = groups.get(key);
+      if (existing) existing.push(event);
+      else groups.set(key, [event]);
+    }
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
+
   const entityTypes = data
     ? [...new Set(data.map((e) => e.entityType))].sort()
     : [];
+  const externalChannels = useMemo(
+    () => [...new Set((data ?? []).map((event) => event.channel ?? "external"))].sort(),
+    [data],
+  );
 
   const artifactText = artifactPreview(artifactQuery.data);
 
@@ -289,6 +311,33 @@ export function Activity() {
                 <SelectItem value="all">Tout</SelectItem>
               </SelectContent>
             </Select>
+            {mode === "external" ? (
+              <>
+                <Select value={externalStatusFilter} onValueChange={(value) => setExternalStatusFilter(value as ExternalStatusFilter)}>
+                  <SelectTrigger className="w-[140px] h-8 text-xs">
+                    <SelectValue placeholder="Statut" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous statuts</SelectItem>
+                    <SelectItem value="success">Succès</SelectItem>
+                    <SelectItem value="failed">Échec</SelectItem>
+                    <SelectItem value="pending">En attente</SelectItem>
+                    <SelectItem value="cancelled">Annulé</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={externalChannelFilter} onValueChange={setExternalChannelFilter}>
+                  <SelectTrigger className="w-[140px] h-8 text-xs">
+                    <SelectValue placeholder="Canal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous canaux</SelectItem>
+                    {externalChannels.map((channel) => (
+                      <SelectItem key={channel} value={channel}>{channel}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            ) : null}
             <Select value={filter} onValueChange={setFilter}>
               <SelectTrigger className="w-[180px] h-8 text-xs">
                 <SelectValue placeholder="Filter by type" />
@@ -364,9 +413,21 @@ export function Activity() {
         )}
 
         {filtered && filtered.length > 0 && mode === "external" && (
-          <div className="space-y-3">
-            {filtered.map((event) => (
-              <ExternalCommunicationRow key={event.id} event={event} onOpenDetails={setSelectedEvent} />
+          <div className="space-y-5">
+            {groupedExternalEvents.map(([channel, events]) => (
+              <section key={channel} className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{channel}</Badge>
+                    <span className="text-sm text-muted-foreground">{events.length} événement{events.length > 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {events.map((event) => (
+                    <ExternalCommunicationRow key={event.id} event={event} onOpenDetails={setSelectedEvent} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}
