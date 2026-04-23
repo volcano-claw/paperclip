@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockActivityService = vi.hoisted(() => ({
   list: vi.fn(),
+  correlationTimeline: vi.fn(),
+  externalCommunications: vi.fn(),
+  listForAgent: vi.fn(),
   forIssue: vi.fn(),
   runsForIssue: vi.fn(),
   issuesForRun: vi.fn(),
@@ -19,6 +22,10 @@ const mockIssueService = vi.hoisted(() => ({
   getByIdentifier: vi.fn(),
 }));
 
+const mockAuditArtifactService = vi.hoisted(() => ({
+  getById: vi.fn(),
+}));
+
 vi.mock("../services/activity.js", () => ({
   activityService: () => mockActivityService,
   normalizeActivityLimit: (limit: number | undefined) => {
@@ -30,6 +37,7 @@ vi.mock("../services/activity.js", () => ({
 vi.mock("../services/index.js", () => ({
   issueService: () => mockIssueService,
   heartbeatService: () => mockHeartbeatService,
+  auditArtifactService: () => mockAuditArtifactService,
 }));
 
 async function createApp(
@@ -72,6 +80,11 @@ describe("activity routes", () => {
     expect(mockActivityService.list).toHaveBeenCalledWith({
       companyId: "company-1",
       agentId: undefined,
+      action: undefined,
+      status: undefined,
+      channel: undefined,
+      direction: undefined,
+      correlationId: undefined,
       entityType: undefined,
       entityId: undefined,
       limit: 100,
@@ -88,10 +101,115 @@ describe("activity routes", () => {
     expect(mockActivityService.list).toHaveBeenCalledWith({
       companyId: "company-1",
       agentId: undefined,
+      action: undefined,
+      status: undefined,
+      channel: undefined,
+      direction: undefined,
+      correlationId: undefined,
       entityType: "issue",
       entityId: undefined,
       limit: 500,
     });
+  });
+
+  it("passes audit filters when listing company activity", async () => {
+    mockActivityService.list.mockResolvedValue([]);
+
+    const app = await createApp();
+    const res = await request(app)
+      .get("/api/companies/company-1/activity?action=email.sent&status=failed&channel=email&direction=external&correlationId=corr-1");
+
+    expect(res.status).toBe(200);
+    expect(mockActivityService.list).toHaveBeenCalledWith({
+      companyId: "company-1",
+      agentId: undefined,
+      action: "email.sent",
+      status: "failed",
+      channel: "email",
+      direction: "external",
+      correlationId: "corr-1",
+      entityType: undefined,
+      entityId: undefined,
+      limit: 100,
+    });
+  });
+
+  it("returns a correlation timeline in chronological order", async () => {
+    mockActivityService.correlationTimeline.mockResolvedValue([]);
+
+    const app = await createApp();
+    const res = await request(app)
+      .get("/api/companies/company-1/activity/correlations/corr-1?limit=25");
+
+    expect(res.status).toBe(200);
+    expect(mockActivityService.correlationTimeline).toHaveBeenCalledWith("company-1", "corr-1", 25);
+  });
+
+  it("lists external communications with external direction implied", async () => {
+    mockActivityService.externalCommunications.mockResolvedValue([]);
+
+    const app = await createApp();
+    const res = await request(app)
+      .get("/api/companies/company-1/external-communications?channel=http&status=success&agentId=agent-1&entityType=issue&entityId=issue-1&limit=20");
+
+    expect(res.status).toBe(200);
+    expect(mockActivityService.externalCommunications).toHaveBeenCalledWith("company-1", {
+      agentId: "agent-1",
+      status: "success",
+      channel: "http",
+      entityType: "issue",
+      entityId: "issue-1",
+      limit: 20,
+    });
+  });
+
+  it("lists agent-scoped activity with audit filters", async () => {
+    mockActivityService.listForAgent.mockResolvedValue([]);
+
+    const app = await createApp();
+    const res = await request(app)
+      .get("/api/agents/agent-1/activity?companyId=company-1&status=success&channel=email");
+
+    expect(res.status).toBe(200);
+    expect(mockActivityService.listForAgent).toHaveBeenCalledWith("company-1", "agent-1", {
+      action: undefined,
+      status: "success",
+      channel: "email",
+      direction: undefined,
+      correlationId: undefined,
+      entityType: undefined,
+      entityId: undefined,
+      limit: 100,
+    });
+  });
+
+  it("returns a company-scoped audit artifact when accessible", async () => {
+    mockAuditArtifactService.getById.mockResolvedValue({
+      id: "artifact-1",
+      companyId: "company-1",
+      artifactType: "email_body",
+      contentText: "hello",
+    });
+
+    const app = await createApp();
+    const res = await request(app).get("/api/companies/company-1/audit-artifacts/artifact-1");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: "artifact-1", artifactType: "email_body", contentText: "hello" });
+  });
+
+  it("hides audit artifacts from other companies", async () => {
+    mockAuditArtifactService.getById.mockResolvedValue({
+      id: "artifact-1",
+      companyId: "company-2",
+      artifactType: "email_body",
+      contentText: "secret",
+    });
+
+    const app = await createApp();
+    const res = await request(app).get("/api/companies/company-1/audit-artifacts/artifact-1");
+
+    expect(res.status).toBe(404);
   });
 
   it("resolves issue identifiers before loading runs", async () => {

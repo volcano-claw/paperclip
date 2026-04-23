@@ -518,7 +518,18 @@ export interface WorkerToHostMethods {
 
   // HTTP
   "http.fetch": [
-    params: { url: string; init?: Record<string, unknown> },
+    params: {
+      url: string;
+      init?: Record<string, unknown>;
+      audit?: {
+        companyId?: string;
+        entityType?: string;
+        entityId?: string;
+        targetLabel?: string;
+        correlationId?: string;
+        metadata?: Record<string, unknown>;
+      };
+    },
     result: { status: number; statusText: string; headers: Record<string, string>; body: string },
   ];
 

@@ -170,9 +170,9 @@ export function CommandPalette() {
             <DollarSign className="mr-2 h-4 w-4" />
             Costs
           </CommandItem>
-          <CommandItem onSelect={() => go("/activity")}>
+          <CommandItem onSelect={() => go("/audit")}>
             <History className="mr-2 h-4 w-4" />
-            Activity
+            Audit
           </CommandItem>
         </CommandGroup>
 

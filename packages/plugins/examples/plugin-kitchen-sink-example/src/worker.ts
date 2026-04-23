@@ -584,16 +584,37 @@ async function registerActionHandlers(ctx: PluginContext): Promise<void> {
 
   ctx.actions.register("http-fetch", async (params) => {
     const config = await getConfig(ctx);
+    const companyId = getCurrentCompanyId(params);
+    const issueId = typeof params.issueId === "string" && params.issueId.length > 0 ? params.issueId : undefined;
+    const correlationId = typeof params.correlationId === "string" && params.correlationId.length > 0
+      ? params.correlationId
+      : randomUUID();
     const url = typeof params.url === "string" && params.url.length > 0
       ? params.url
       : config.httpDemoUrl || DEFAULT_CONFIG.httpDemoUrl;
     const started = Date.now();
-    const response = await ctx.http.fetch(url, { method: "GET" });
+    const response = await ctx.http.fetch(
+      url,
+      { method: "GET" },
+      {
+        companyId,
+        entityType: issueId ? "issue" : "plugin",
+        entityId: issueId ?? PLUGIN_ID,
+        correlationId,
+        metadata: {
+          action: "http-fetch",
+          issueId: issueId ?? null,
+        },
+      },
+    );
     const body = await response.text();
     const result = {
       ok: response.ok,
       status: response.status,
       url,
+      companyId,
+      issueId: issueId ?? null,
+      correlationId,
       durationMs: Date.now() - started,
       body: body.slice(0, 2000),
     };
